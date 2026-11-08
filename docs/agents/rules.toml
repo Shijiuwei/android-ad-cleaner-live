@@ -1,0 +1,1071 @@
+# 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
+# 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
+# `tests/test_rules_registry.py` 守四条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
+# 锚点与条目双向一致、锚点落在 source 点名的那一小节里。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
+#
+# 字段（除 since 外必填）：
+#   id          `域.对象.断言`，域取 dev | doc | domain
+#   source      `<文档>#<小节标题>`
+#   check       与 status 配对：enforced 指到真实守卫（`test:<模块>::<用例>` / `ci:<job>` / `code:<路径>:<名字>`）；
+#               code 指到写死这条规则的代码（`code:<路径>:<名字>`）；manual / advisory / dead 写 none
+#   status      enforced 有能返红的守卫 | manual 有判据但只能人看 | advisory 偏好、无判据
+#               dead 指不到东西或被取代、待删 | code 在实现里写死，改坏要改代码本身
+#   why         这条规则为什么存在：事故，或删掉它会坏的具体场景
+#   expires_if  什么情况下可以删
+#   since       引入该规则的提交（可选）
+
+[[rule]]
+id = "doc.rules.registry-indexes-prose"
+source = "CLAUDE.md#开发"
+check = "test:test_rules_registry::RulesRegistryTests.test_anchors_and_registry_agree"
+status = "enforced"
+why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；四条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842、#845）。只挂锚点不登记、登记了不挂锚点、或出处指到别的小节都会红；两条都不做的那种新条目，守卫看不见。"
+expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同四条不变式一起删。"
+since = "7f54928"
+
+[[rule]]
+id = "dev.tests.regression-command"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 ModuleNotFoundError 或跑出不同结果；CI 的 unittest job 恰好跑同一条命令、只装 requirements.txt，但没有测试比对正文与 CI，改错正文不会红。"
+expires_if = "本地入口收成一条脚本、CI 不再直接跑 unittest discover 时删。"
+
+[[rule]]
+id = "dev.tests.interpreter-version"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "3.13 起编译器剥掉文档字符串的公共缩进，异常 repr 与 argparse 帮助随之逐字不同；两版解释器混跑会让逐字节对拍本地绿、CI 红。"
+expires_if = "对拍不再比较逐字输出、或只剩一版解释器时删。"
+
+[[rule]]
+id = "dev.tests.baseline-clean-copy"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "基线数写进文档后会被下一次 rebase 作废（#355 被打回三次），主副本里还躺着别的会话没提交的用例；test_source_text 只拦住「不许写浮动引用」这一半，干净副本与 npm ci 靠人。"
+expires_if = "基线数不再进文档、或 CI 直接给出基线数时删。"
+
+[[rule]]
+id = "dev.workspace.worktree-only"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "主副本的当前分支随时被别的会话切走，`git checkout --` / `reset` / `stash` 在那里做会丢掉别人的未提交改动。"
+expires_if = "每个会话都有自己的克隆或容器、主副本不再共享时删。"
+
+[[rule]]
+id = "dev.git.rebase-before-push"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "并行会话会在开工到推送之间推进 main，基于旧 SHA 推送让 PR 直接 CONFLICTING，而冲突的 PR 不触发 CI——看着像语法问题，其实一次 fetch 就没了。"
+expires_if = "平台保证 PR 冲突时仍跑 CI，或改由机器人自动 rebase 时删。"
+
+[[rule]]
+id = "dev.ci.two-interpreters"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "Windows 侧 skip 掉 POSIX-only 的一批（含 CLI 逐字节对拍），两版解释器各跑一次才盖得住 expanduser 与编码差异；没有测试比对正文与 workflow，改解释器版本或删掉一个 job 都不会红。"
+expires_if = "只剩一个要支持的平台，或 Windows job 不再跑同一套用例时删。"
+
+[[rule]]
+id = "dev.ruff.pinned-and-scoped"
+source = "CLAUDE.md#开发"
+check = "test:test_doc_consistency::LintCommandTests.test_ruff_targets_match_everywhere"
+status = "enforced"
+why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md 与 CI 两个 job 三处逐字一致（b17d420、#624）。守卫比的是目标清单，版本号三处一致仍靠人。"
+expires_if = "CI 与本地共用一个命令来源、目标清单不再需要三处对照时，连同 LintCommandTests 一起删。"
+since = "b17d420"
+
+[[rule]]
+id = "dev.tests.frontend-harness"
+source = "CLAUDE.md#开发"
+check = "test:test_web_client::WebClientJsTests.test_page_behaviour_cases_pass"
+status = "enforced"
+why = "前端只有这一层覆盖：缺 node、用例数为 0、漏写 window.close() 都判红而不是静默跳过（ADR-0017），页面加载的是真实的 index.html 而不是另写一份样本。"
+expires_if = "前端换成 unittest 里能直接跑的框架时删。"
+
+[[rule]]
+id = "doc.changelog.one-line-entry"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "条目膨胀成段落会把用户看的更新说明塞回 CHANGELOG，而 Release Note 才是唯一权威（#448）；测试数写进 CHANGELOG 后 rebase 一次就失效。"
+expires_if = "CHANGELOG 改由 PR 标题自动生成时删。"
+
+[[rule]]
+id = "doc.standards.judgement-only"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "机械规则写进审查标准会让评审反复报 CI 已经管的事，真正的判断项被稀释；这条同时是 CODING_STANDARDS.md 的收录边界。"
+expires_if = "两份文档合并、审查标准直接由注册表渲染时删。"
+
+[[rule]]
+id = "doc.community.local-knowledge-only"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "把逐条回复与 issue 编号抄进文档会与 issue 上的现状漂移；文档只留 GitHub 上看不到的判据与真机缺口。"
+expires_if = "社区判据改为 issue 模板里的结构化字段时删。"
+
+[[rule]]
+id = "dev.commands.single-dispatch"
+source = "CLAUDE.md#开发"
+check = "code:tool/run.py:dispatch"
+status = "code"
+why = "退出码语义分散会让客户端分不清「没执行」与「失败」（ADR-0005）；#708 之后 adapt 的三条子命令也靠返回码，把 sys.exit 加回 helper 就把它埋进调用栈。"
+expires_if = "命令入口改成注册表驱动的插件、退出码统一在平台层给出时删。"
+
+[[rule]]
+id = "dev.row.single-definition"
+source = "CLAUDE.md#开发"
+check = "code:tool/row.py:line"
+status = "code"
+why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；icon_hit 的本地副本已有 test_icon_hit_530 守着，其余只认这一份。"
+expires_if = "读屏直接返回结构化的控件归属、不再从 bounds 推行的结构时删。"
+
+[[rule]]
+id = "dev.entries.source-and-family"
+source = "CLAUDE.md#开发"
+check = "test:test_entries::SourceTest.test_every_entry_has_a_source"
+status = "enforced"
+why = "入口没有出处就指向不存在的页面，还会给出用不了的「可提速提示」；品牌家族建第二份表会让广告包、参考脚本与版本比较各算各的。"
+expires_if = "入口改由运行时探测、不再维护静态表时删。"
+
+[[rule]]
+id = "dev.polarity.word-lists"
+source = "CLAUDE.md#开发"
+check = "code:tool/polarity.py:NEG_PREFIX"
+status = "code"
+why = "否定词与广告 / 追踪词决定开关该开还是该关（ADR-0008）；`tool/fast.py` 只是 re-export，第二份词表会让引擎与词库给出相反方向。"
+expires_if = "方向改由脚本逐条显式声明、不再按文字推断时删。"
+
+[[rule]]
+id = "doc.vocab.generated-from-recipes"
+source = "CLAUDE.md#开发"
+check = "test:test_vocab::RealRecipesTest.test_doc_is_in_sync"
+status = "enforced"
+why = "词库与同页保留项从机型脚本现算，手写第二份会在脚本改动后漂移；方向取自 polarity 而不是调用名，读不出来的脚本单列而不是丢弃（#681）。"
+expires_if = "词库不再作为清单交付、或脚本不再用 p.off() / close_named() 表达时删。"
+
+[[rule]]
+id = "dev.navigation.raise-vs-false"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "`setting` 失败只返回 False，没有兜底的段会空跑却按成功记（#776）；选错导航方法会点错地方。"
+expires_if = "导航方法统一成一种失败语义（全部抛异常或全部返回 False）时删。"
+
+[[rule]]
+id = "dev.adapt.serial-subcommands"
+source = "CLAUDE.md#开发"
+check = "test:test_doc_consistency::AdaptCommandDocTests.test_frozen_word_list_matches_the_dispatcher"
+status = "enforced"
+why = "`-s 序列号 adapt gen` 与未知子命令曾静默打印帮助并按成功退出，用户以为跑完了（#708）。"
+expires_if = "子命令分派改由全局 `--serial` 承担时删。"
+
+[[rule]]
+id = "doc.tutorial.brand-taps-single-source"
+source = "CLAUDE.md#开发"
+check = "test:test_doc_consistency::BrandTapsDocTests.test_brand_tap_tables_match_single_source"
+status = "enforced"
+why = "四行「连点 7 下」的表出现在三份文档里，改一处漏两处会让用户按旧步骤打不开开发者模式。"
+expires_if = "三份文档合并、或表由渲染时注入而不是标记区时删。"
+
+[[rule]]
+id = "doc.site.shared-stylesheet"
+source = "CLAUDE.md#开发"
+check = "test:test_doc_consistency::SiteCssTests.test_both_pages_carry_the_shared_block"
+status = "enforced"
+why = "两页各写一份调色板会让外观与深色档分叉；页面必须单文件自包含（ADR-0025），所以用标记区渲染而不是外链。"
+expires_if = "官网改由构建产物生成、可以引外链时删。"
+
+[[rule]]
+id = "dev.switches.plan-and-readback"
+source = "CLAUDE.md#开发"
+check = "code:tool/fast.py:plan_switches"
+status = "code"
+why = "目标选择、屏带过滤与 checked / kept / disabled 分散会让灰开关被当成没拨动（ADR-0008、ADR-0021）；off() 只做点击 → 回读 → 重试 → 报告，两个纯函数给出补点落点与回读结论。"
+expires_if = "拨动计划与回读合并成一个对象、调用方不再各自拼判定时删。"
+
+[[rule]]
+id = "dev.launch.foreground-ownership"
+source = "CLAUDE.md#开发"
+check = "test:test_launch_foreground_581::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"
+status = "enforced"
+why = "空焦点曾被判成「离开了目标 App」，启动段直接停段（#581、#193）；只有确认落在目标 App 时才读页面文字、关弹窗（ADR-0022）。"
+expires_if = "启动归属改由系统事件而不是逐帧焦点判定时删。"
+
+[[rule]]
+id = "dev.wait.single-loop"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "settle / setting / ChannelPage.refresh / off / confirm 五个消费点各写一份轮询，会各自长出不同的超时与站稳判定；全仓 AST 禁令会误报 14 处，所以只登记、不派守卫。"
+expires_if = "等待能力移进读屏库、调用方不再自己轮询时删。"
+
+[[rule]]
+id = "dev.channels.page-entry"
+source = "CLAUDE.md#开发"
+check = "code:tool/chan_fast.py:ChannelPage"
+status = "code"
+why = "直达 / 转应用通知页 / 内联行 / 同名放弃四类曾散在脚本里判断，同名渠道被点错（ADR-0007）；四个一行前向壳不该长逻辑。"
+expires_if = "渠道页改由结构化接口而不是读屏文字定位时删。"
+
+[[rule]]
+id = "dev.events.vocabulary"
+source = "CLAUDE.md#开发"
+check = "test:test_events::EmitTests.test_the_vocabulary_is_still_the_same_six"
+status = "enforced"
+why = "客户端按中文文案判状态会随措辞改动而失败（ADR-0004）；六个 kind 是引擎与客户端之间唯一的契约面。"
+expires_if = "引擎与客户端改走同一进程内的对象、不再有事件行时删。"
+
+[[rule]]
+id = "dev.host.wording"
+source = "CLAUDE.md#开发"
+check = "code:tool/host.py:ON_PHONE"
+status = "code"
+why = "同一句诊断在电脑上要说「点一下手机」、在手机版要说「点一下屏幕」（#747、ADR-0019 增补段）；按宿主分叉的只该是措辞，别把判定也分叉。"
+expires_if = "手机版与桌面版合并成一个宿主时删。"
+
+[[rule]]
+id = "dev.channels.classification"
+source = "CLAUDE.md#开发"
+check = "code:tool/channel_policy.py:classify"
+status = "code"
+why = "营销 / 服务 / 受保护七组判定散开会让扫描与拨动给出相反结论（ADR-0006）；前台服务的证据字段 Android 14 起改名，两个都要认（#459）。"
+expires_if = "渠道判定改成服务端规则、或机型脚本各自声明时删。"
+
+[[rule]]
+id = "dev.navigation.bottom-tab"
+source = "CLAUDE.md#开发"
+check = "code:tool/fast.py:Phone"
+status = "code"
+why = "底部标签要在屏底带内按三层匹配找，退化成全屏文字匹配会点到同名列表项（ADR-0012）；它不重试不确认，需要文字确认的导航仍用 go()。"
+expires_if = "界面提供结构化的底部导航节点、不再靠文字匹配时删。"
+
+[[rule]]
+id = "dev.ui.result-line-routing"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。"
+expires_if = "结果页改由结构化字段渲染、不再解析 tail 末行时删。"
+
+[[rule]]
+id = "dev.ui.not-run-rows"
+source = "CLAUDE.md#开发"
+check = "test:test_not_run_steps_577::PlanTasksTests.test_channels_are_told_apart_unchecked_from_none_found"
+status = "enforced"
+why = "没勾的项曾从结果里整行消失，用户以为跑漏了（#577、ADR-0023）；三档原因取自 Api 的检测与扫描结果，不从 plan 的空字段反推。"
+expires_if = "结果页改由 plan 直接带 skip_reason 渲染时删。"
+
+[[rule]]
+id = "dev.ui.retry-plan"
+source = "CLAUDE.md#开发"
+check = "test:test_retry_638::RetryableTests.test_only_step_the_device_failed_at_is_retryable"
+status = "enforced"
+why = "把「没执行」与「用户停止」的步骤也算进重试，会让它们变成失败并重复拨开关；广告开关步整段重跑则会重存快照、重拨已关的项（#638、ADR-0026）。"
+expires_if = "客户端不再提供重试、或引擎自己按段续跑时删。"
+
+[[rule]]
+id = "dev.android.screen-state"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "页面流程只有一个 Screen 状态，切换都经过 AppModel 的方法（ADR-0018）；判断逻辑放 view.py 才好用 Python 测，写进 Kotlin 就只能靠手点。"
+expires_if = "手机版换成非 Compose 的界面栈时删。"
+
+[[rule]]
+id = "dev.android.replacement-layer"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。"
+expires_if = "手机版不再靠替换层跑引擎（例如改走真实 adb）时删。"
+
+[[rule]]
+id = "dev.tests.fixtures-single-assembly"
+source = "CLAUDE.md#开发"
+check = "none"
+status = "manual"
+why = "`Phone` 的装配散到各用例里，夹具与真实装配会各自漂移，靠它对拍出来的「一致」也就不证明任何事。"
+expires_if = "Phone 改由工厂函数或依赖注入统一构造时删。"
+
+[[rule]]
+id = "dev.tests.no-real-wait"
+source = "CLAUDE.md#开发"
+check = "test:test_recipe_loader::RecipeLoaderGuardTests.test_no_file_under_tests_loads_a_recipe_on_its_own"
+status = "enforced"
+why = "无设备用例真等 adb 超时会把回归从秒级拖到分钟级，自己 exec 一份脚本会真 sleep；装载与假钟由 test_recipe_loader 守着，scan 分支不许读真型号那一半没有守卫。"
+expires_if = "读屏与等待全部走可注入的时钟、不再有真实超时路径时删。"
+
+[[rule]]
+id = "dev.reader.unified-adapter"
+source = "CLAUDE.md#开发"
+check = "code:tool/reader.py:Reader"
+status = "code"
+why = "机型脚本与测试直接用 `Phone.d`（历史别名），新增读屏能力只加进 Reader 才两处同时可用。"
+expires_if = "读屏库直接作为引擎依赖、不再需要适配层时删。"
+
+[[rule]]
+id = "dev.android.runtime-symbols"
+source = "CLAUDE.md#开发"
+check = "test:test_runtime_symbols::RuntimeSymbolTests.test_every_referenced_name_exists_in_the_desktop_dependency"
+status = "enforced"
+why = "手机上「有」的异常名由 u2.install() 动态注册，电脑上装的是真库；在 tool/ 与 gui/ 里引用一个桌面没有的名字，会在用户机器上 import 就炸。"
+expires_if = "手机版不再替换 uiautomator2 / adbutils 时删。"
+
+[[rule]]
+id = "dev.adb.pinned-platform-tools"
+source = "CLAUDE.md#开发"
+check = "test:test_reports_1029::GuiTests.test_pinned_adb_covers_every_platform"
+status = "enforced"
+why = "adb 版本漂移会让读屏输出一起变，出问题先要能排除 adb 版本；守卫只保证 ADB_PINNED 三个平台的条目名含 ADB_VERSION、校验值是 64 位十六进制，正文里的版本号与对 Google repository2-3.xml 的 SHA-1 核对仍靠人。"
+expires_if = "安装包自带 adb、客户端不再下载 platform-tools 时删。"
+
+[[rule]]
+id = "dev.client.data-paths"
+source = "CLAUDE.md#开发"
+check = "code:gui/app.py:ClientData"
+status = "code"
+why = "数据目录与备份目录各自硬编码，会让升级、卸载与备份互相看不见对方的文件；工具模块要惰性取，避免 import 期就绑定路径。"
+expires_if = "客户端改由平台 API 提供数据目录时删。"
+
+[[rule]]
+id = "dev.windows.startup-verdicts"
+source = "CLAUDE.md#开发"
+check = "test:test_win_preflight::StartupAdviceTests.test_motw_wins_over_the_load_branch_when_both_apply"
+status = "enforced"
+why = "启动失败有三种来源（缺 WebView2、MOTW、原文拒载），顺序错了会把带 MOTW 的 dll 报成「需要重装运行时」（#597、#811、ADR-0003）；判据只在 winpreflight.py。"
+expires_if = "Windows 安装包不再用 pywebview 与托管的 dll 时删。"
+
+[[rule]]
+id = "doc.numbers.reproducible-baselines"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算，评审只能从头数一遍才发现对不上。"
+expires_if = "CHANGELOG 与 PR 里的计数由流水线自动生成、不再手写时删。"
+
+[[rule]]
+id = "doc.numbers.recompute-after-rebase"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），两轴审查各报两次数字对不上，返工半个回合；换一个更新的绝对数救不了，只会在下一次合入时再失效。"
+expires_if = "用例总数不再写进文档、或 CI 直接给出带基线的计数时删。"
+
+[[rule]]
+id = "doc.numbers.ask-for-the-baseline"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现，第二轮才补成带基线的 575；不连基线一起要，返工是必然的。"
+expires_if = "审查意见改由模板带出基线口径、不再靠评审逐条写时删。"
+
+[[rule]]
+id = "doc.refs.symbols-not-lines"
+source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
+check = "none"
+status = "manual"
+why = "ADR-0004 初稿把改前基线的行号与改后的位置混写，评审把旧行号当成新文件的行号；CONTEXT.md 也曾指到一行会漂的注释上（320ce35）。"
+expires_if = "文档不再引用代码位置、改由 IDE 跳转或自动生成的索引承担时删。"
+
+[[rule]]
+id = "doc.refs.cleanup-on-move"
+source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
+check = "none"
+status = "manual"
+why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。"
+expires_if = "文档里的代码引用改由机器生成、移动符号时自动重写时删。"
+
+[[rule]]
+id = "dev.tests.behaviour-change-needs-red-test"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。"
+expires_if = "变异测试进了 CI，返红由工具判定时删。"
+
+[[rule]]
+id = "dev.tests.guard-case-declares-itself"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
+expires_if = "用例是否守卫不回退由工具自动标注时删。"
+
+[[rule]]
+id = "dev.tests.refactor-needs-comparison"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "「只是搬家」最容易被当成免测：搬家改的是执行顺序与落点，行为可以不变也可以变，不算出差异就没人知道是哪一种。允许差异与样本口径不写清，读数的人没法复算。"
+expires_if = "重构等价性由工具保证（自动重写加快照对拍流水线）时删。"
+
+[[rule]]
+id = "dev.tests.comparison-must-be-falsifiable"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "对拍只喂成功路径时两边走的都是同一条捷径，零差异不证明任何事：#373 的 29 组对拍没走到 quickapp 与 finally 恢复，两个真 bug 由评审抓出；渠道判定那次用实现自己的词表生成样例，删掉「种草」仍全绿。"
+expires_if = "改前改后的对拍不再是证明等价或差异的手段时删。"
+
+[[rule]]
+id = "dev.tests.stub-and-assert"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。"
+expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删。"
+
+[[rule]]
+id = "dev.tests.autospec-class-members"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "普通 Mock 照单全收实参，签名改了、self 绑错了都不会红；autospec=True 当场报出来。"
+expires_if = "测试替身由类型检查或协议替身自动生成时删。"
+
+[[rule]]
+id = "dev.tests.stubs-follow-the-refactor"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "桩住的协作方已经不在调用链上，用例就成了什么都没测的空壳；改不动的桩留着只会骗下一个 patch 它的人（ADR-0011）。"
+expires_if = "调用关系由静态图守护、改完自动报出失效的桩时删。"
+
+[[rule]]
+id = "dev.tests.substitute-identity"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "#684 的用例对着一个从没被创建过的值断言，把 clearInterval(pollJob) 改成 clearInterval(undefined) 也全绿。"
+expires_if = "前端不再用全局 timer id 表示待清除的调度、改由可断言的调度对象时删。"
+
+[[rule]]
+id = "dev.errors.sweep-the-receivers"
+source = "CODING_STANDARDS.md#换掉一个 helper 的错误契约时，遍历它的收容点"
+check = "none"
+status = "manual"
+why = "#373 把 run.adb_shell() 从 sys.exit 改成抛 DeviceLost 后，quickapp 的 except (RuntimeError, OSError, ValueError) 开始接住断线并报成组件关闭失败、off 返回 0，cmd_recipe 的 finally 多打一行；两处都是评审逐行读出来的。"
+expires_if = "helper 的终止方式统一成一种、或调用方不再宽泛捕异常时删。"
+
+[[rule]]
+id = "dev.fields.read-declared-directly"
+source = "CODING_STANDARDS.md#`Phone` 构造处声明的字段直接读，不用 `getattr` 兜底"
+check = "test:test_declared_fields::DeclaredFieldTests.test_declared_fields_are_read_directly"
+status = "enforced"
+why = "#344 把六个字段收进 Phone 时，locked() 里留了一处 getattr 兜底，回归全绿，直到自查才发现声明与读取不一致。守卫只查 tool/ 里类自己 __init__ 声明过的字段（含 self.W, self.H 这类解包与 default= 关键字写法），范围外的 getattr（如上游库对象的 _process）不管；正文末句「Mock() 冒充走 fixtures.phone_mock()」没有守卫。"
+expires_if = "Phone 改由结构化配置对象构造、字段不再由 __init__ 逐个声明时删。"
+
+[[rule]]
+id = "dev.wait.budget-unit"
+source = "CODING_STANDARDS.md#搬等待 / 重试循环时，先查旧预算按次数还是按时长"
+check = "none"
+status = "manual"
+why = "把 wait_page / off 的 tries 换成 timeout 后单测全绿、本机看不出差别，只有慢读屏对拍才暴露更早放弃。"
+expires_if = "等待预算统一按时间计、不再有按次数的循环时删。"
+
+[[rule]]
+id = "doc.adr.mechanism-pointable"
+source = "CODING_STANDARDS.md#ADR / 文档声称的机制要能在代码里指认"
+check = "none"
+status = "manual"
+why = "这条规则的反例本身就被查出引文与代码都对不上：ADR-0010 原文没有「关键写段」这句，`_work()` 的四处写点自 a5d98c5 起就在 `with j.lock:` 内。机制断言不逐条指认，连转述它的反例也会跟着漂。"
+expires_if = "ADR 不再写机制性断言、只记录决定与取舍时删。"
+
+[[rule]]
+id = "doc.comments.current-ticket"
+source = "CODING_STANDARDS.md#新增注释里的票号是这次做的票"
+check = "none"
+status = "manual"
+why = "一批为 #674 / #675 新写的注释与 docstring 全写成 #662（上一个 PR 的票），CHANGELOG 与提交标题对、注释全错，检索整批漏掉。"
+expires_if = "注释里的票号改由提交信息推导、不再手写时删。"
+
+[[rule]]
+id = "doc.reports.private-infra-stays-local"
+source = "CLAUDE.md#错误日志上报"
+check = "none"
+status = "manual"
+why = "上报服务的地址、数据库与运维入口进了仓库就会被克隆、索引与镜像；`CLAUDE.local.md` 与 `.private/` 是唯一落点。"
+expires_if = "上报服务下线、或改由公开文档说明时删。"
+
+[[rule]]
+id = "doc.release.note-is-the-only-authority"
+source = "CLAUDE.md#发版"
+check = "none"
+status = "manual"
+why = "Release 正文与仓库里的副本会分叉，用户看到的那份才是权威（#448）；README 首段从它复制而不是各写一份。"
+expires_if = "Release 正文改由仓库内的文件生成并发布时删。"
+
+[[rule]]
+id = "doc.release.latest-json-after-release"
+source = "CLAUDE.md#发版"
+check = "none"
+status = "manual"
+why = "不发最新版提示，已经装旧版的用户永远不会知道有新版；文件在官网，步骤在本机 CLAUDE.local.md。"
+expires_if = "客户端改成读 GitHub Releases API 判断新版时删。"
+
+[[rule]]
+id = "doc.release.site-mirror-sync"
+source = "CLAUDE.md#发版"
+check = "none"
+status = "manual"
+why = "国内用户访问不到 GitHub Pages 的那份官网，两份不同步会让下载按钮指向旧版本。"
+expires_if = "官网只剩一份托管、国内可达时删。"
+
+[[rule]]
+id = "doc.release.gitee-upload"
+source = "CLAUDE.md#发版"
+check = "test:test_download_page_gitee::UploaderTest.test_a_tampered_public_download_stops_the_release"
+status = "enforced"
+why = "国内下载走 Gitee，脚本先把包从公开 Release 下载回来核对 SHA256、传完再匿名下载核对（#719）；令牌不进仓库与对话。"
+expires_if = "国内下载改走自建对象存储时删。"
+
+[[rule]]
+id = "doc.release.followup-queue"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "新版不送到报告者手上，不复测催就永远关不掉 waiting-for-verify（#544、#560）：队列只有发版时过一次，漏一次就多一张永远开着的票。"
+expires_if = "发版流程自动给报告者发复测通知时删。"
+
+[[rule]]
+id = "doc.issue.ticket-before-work"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "实现完再补票等于跳过 spec 与 triage，PR 会被当成无源改动；分支名不带票号时也串不回验收面。"
+expires_if = "仓库改由外部需求管理系统直接生成分支时删。"
+
+[[rule]]
+id = "doc.review.base-sha-pinned"
+source = "docs/agents/code-review.md#基线钉 SHA"
+check = "none"
+status = "manual"
+why = "别的会话合了 PR 之后 `origin/main` 尖端会把别人的提交算进本分支的改动面，各轴数到不同的树（#684 那轮两轴各报同一条）。"
+expires_if = "审查改为按平台给出的 PR diff 运行、基线由平台钉住时删。"
+
+# ---- docs/agents/code-review.md ----
+
+[[rule]]
+id = "doc.review.worktree-diff-path"
+source = "docs/agents/code-review.md#基线钉 SHA"
+check = "none"
+status = "manual"
+why = "审查代理在 cwd 上跑时，cwd 通常是主副本：别的会话未提交的改动与已合并的历史提交都会算进本分支的改动面，未跟踪的新文件还根本不出现在 git diff 里。"
+expires_if = "审查按平台给出的 PR diff 运行、工作区位置不再影响取数时删。"
+
+[[rule]]
+id = "doc.review.axis-ownership"
+source = "docs/agents/code-review.md#基线钉 SHA"
+check = "none"
+status = "manual"
+why = "两轴都去数用例总数时各自读到哪棵树看运气，同一条会被报两次；计数归 Standards 轴一次说清，Spec 轴才只看票面覆盖。"
+expires_if = "审查轴合并成一个代理、计数不再需要跨轴对齐时删。"
+
+[[rule]]
+id = "doc.review.freeze-workspace"
+source = "docs/agents/code-review.md#评审期间冻结工作区"
+check = "none"
+status = "manual"
+why = "并发上限 3、五路必然分两批，后一批读到的是更晚的树；候选 1 那轮三个代理读到同一文件的三个快照，一路把刚修好的用例报成「1 红」，另一路把 ADR 里改前的行号当成新文件的行号。"
+expires_if = "审查按提交快照而不是工作区运行、每个代理读到同一棵树时删。"
+
+[[rule]]
+id = "doc.review.default-three-axes"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "只跑规范轴会漏掉功能错误，只跑 bug 轴会漏掉破坏当年保护的改动；三类问题各由一轴负责，结论才既能对上文档也能对上历史。"
+expires_if = "审查改由一个代理一次覆盖三类问题时删。"
+
+[[rule]]
+id = "doc.review.extra-axis-for-legacy"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "历史包袱重的区域要加「既往 PR / issue 评论」轴，否则只看得见 diff 看不见当年保护过的行为；单开一路「注释一致性」则相反，产出通常只有低置信度措辞问题（候选 1 那轮五路约 70 万 token，其中两路只有这类结论），并进 bug 轴一次问完即可。"
+expires_if = "注释与代码的一致性由工具检查、不再需要人读时删。"
+
+[[rule]]
+id = "doc.review.prompt-contract"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "审查代理默认会顺手改代码、往 GitHub 发评论；不把「只读、只回问题清单」写进每路 prompt，改动就会绕过实现者直接落在分支上。"
+expires_if = "审查代理由平台限制成只读、问题清单格式由工具固定时删。"
+
+[[rule]]
+id = "doc.review.findings-threshold"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "80 分以下的推测条目会把真问题挤到后面，评审得先逐条反驳才能收口。"
+expires_if = "审查代理不再给置信度、改由工具判定是否成立时删。"
+
+[[rule]]
+id = "doc.review.no-pr-no-comment"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "为了留评论先建 PR，等于让审查流程反过来决定要不要发 PR，审完还得去关掉它。"
+expires_if = "审查结论有独立落点、不进 PR 评论时删。"
+
+[[rule]]
+id = "doc.review.verify-before-fix"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "代理给的 0–100 置信度不是证据；「撤掉修复就返红」才证明改的是它点的那条，而不是碰巧一起绿了。"
+expires_if = "变异测试进了 CI，返红由工具判定时删。"
+
+[[rule]]
+id = "doc.review.scale-quota"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "manual"
+why = "超过 20 个文件或碰到核心状态机还只跑三轴，改动面铺开后每轴都只能泛读；并发上限 3 也让五路必然分两批。"
+expires_if = "审查并发上限提高、或改动面不再按文件数衡量时删。"
+
+[[rule]]
+id = "doc.review.non-prod-two-axes"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "manual"
+why = "不碰生产代码的 diff 加历史意图轴，产出的多半是规范轴的重述（#684 那轮规格轴与规范轴各报了同一条）。"
+expires_if = "历史包袱改由区域标签自动带出、不再靠加轴时删。"
+
+[[rule]]
+id = "doc.review.hunk-scoped-prompts"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "advisory"
+why = "圈定 hunk 范围比「读整个仓库找相关代码」省一半 token；没有判据，只是成本上的偏好。"
+expires_if = "审查代理自己按 diff 定位、不再需要 prompt 圈范围时删。"
+
+[[rule]]
+id = "doc.review.no-rerun-suite"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "advisory"
+why = "实现刚跑过全量回归，三轴各再跑一遍只是重复；要跑就跑被怀疑的那一条。没有判据，靠人自律。"
+expires_if = "回归耗时降到可以随手重跑、或 CI 结果直接喂给审查代理时删。"
+
+# ---- docs/agents/domain.md ----
+
+[[rule]]
+id = "domain.read-before-exploring"
+source = "docs/agents/domain.md#Before exploring, read these"
+check = "none"
+status = "manual"
+why = "不看词表与相关 ADR 就命名或提方案，产出会用同义词重述已有决定，或者与一条已定案的决定正面冲突。"
+expires_if = "词表与 ADR 由 IDE 或检索工具在提问时自动带出时删。"
+
+[[rule]]
+id = "domain.missing-files-proceed-silently"
+source = "docs/agents/domain.md#Before exploring, read these"
+check = "none"
+status = "advisory"
+why = "这些文件按需惰性创建；缺文件就报「文档缺失」会把正常的空目录当成问题，打断探索。"
+expires_if = "词表与 ADR 在仓库初始化时就一定存在时删。"
+
+[[rule]]
+id = "domain.use-glossary-vocabulary"
+source = "docs/agents/domain.md#Use the glossary's vocabulary"
+check = "none"
+status = "manual"
+why = "词表明确避开的同义词一出现，同一个概念在票、ADR 与代码里就有两个名字，检索与对照都会漏。"
+expires_if = "术语不再靠散文维护、改由结构化词表约束时删。"
+
+[[rule]]
+id = "domain.gap-is-a-signal"
+source = "docs/agents/domain.md#Use the glossary's vocabulary"
+check = "none"
+status = "advisory"
+why = "概念不在词表里时，要么是自造词（该改回既有说法），要么是真的缺口（该记给 /domain-modeling）；不区分就会让两者都悄悄留在代码里。"
+expires_if = "词表由代码里的标识符自动生成、缺口能自动报出时删。"
+
+[[rule]]
+id = "domain.adr-number-from-directory"
+source = "docs/agents/domain.md#Numbering a new ADR"
+check = "none"
+status = "manual"
+why = "CLAUDE.md 的 ADR 列表会落后于目录，并行会话还会抢号：#447 按列表写了 0009，rebase 时发现 0009 已被占用，只能改成 0010 并重写所有引用。"
+expires_if = "ADR 改由工具按合并顺序分配编号时删。"
+
+[[rule]]
+id = "domain.flag-adr-conflicts"
+source = "docs/agents/domain.md#Flag ADR conflicts"
+check = "none"
+status = "manual"
+why = "静默覆盖一条已定案的决定，读者后来只在 ADR 里看到旧结论、在代码里看到新做法，两边都不知道哪个算数。"
+expires_if = "ADR 之间有机器可查的取代关系（supersedes 字段）时删。"
+
+# ---- docs/agents/triage-labels.md ----
+
+[[rule]]
+id = "doc.triage.five-roles-map"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "skill 说的是角色名（needs-triage 等），仓库用的是标签字符串；不按这张表翻译，会打出 skill 自己都不认的标签。"
+expires_if = "仓库直接采用 skill 的角色名作标签、不再需要映射时删。"
+
+[[rule]]
+id = "doc.triage.waiting-for-verify-outranks"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
+expires_if = "issue 状态改由平台的原生状态机表达、标签不再承担这个语义时删。"
+
+[[rule]]
+id = "doc.triage.in-progress-is-a-claim"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "`in-progress` 是认领而不是角色，和 `waiting-for-verify` 不并存；两个标签叠在同一张票上时，读的人分不清是有人在改还是等复测。摘标时机只写在 issue-tracker 的「票的生命周期」里。"
+expires_if = "认领改由平台原生的 assignee 表达、标签不再表示进行中时删。"
+
+[[rule]]
+id = "doc.triage.one-category-label"
+source = "docs/agents/triage-labels.md#分类标签"
+check = "none"
+status = "manual"
+why = "分类是筛选与统计的口径；2026-11-01 复查时全库 150 张 open 票里有 8 张缺分类、3 张双分类，按分类检索会漏票。"
+expires_if = "issue 类型改由 GitHub 原生 issue type 表达时删。"
+
+[[rule]]
+id = "doc.triage.new-device-is-a-topic"
+source = "docs/agents/triage-labels.md#分类标签"
+check = "none"
+status = "manual"
+why = "把 `新机型` 当第三个分类用，分类就不再互斥；它是主题标签，机型请求仍按 `enhancement` 处理并同时保留它，才能既按类型统计又按主题检索。"
+expires_if = "机型请求有独立的 issue 模板与类型、不再靠主题标签时删。"
+
+[[rule]]
+id = "doc.triage.grilling-boundary"
+source = "docs/agents/triage-labels.md#Triage 与 grilling 的边界"
+check = "none"
+status = "manual"
+why = "`/triage` 自行发起 grilling 会把初筛变成一轮方案讨论，待定的决定还没写进票面就先聊散了；grilling 由用户单独触发。"
+expires_if = "triage 与 grilling 合并成一个流程时删。"
+
+# ---- docs/agents/issue-tracker.md ----
+
+[[rule]]
+id = "doc.tracker.gh-cli-for-everything"
+source = "docs/agents/issue-tracker.md#Issue tracker: GitHub"
+check = "none"
+status = "manual"
+why = "票、PR 与评论都只在 GitHub 上；换一个客户端或手写 API 调用会让取数口径（comments、labels、association）与这里的命令对不上。"
+expires_if = "issue 迁移到别的平台时删。"
+
+[[rule]]
+id = "doc.tracker.issue-command-recipes"
+source = "docs/agents/issue-tracker.md#Conventions"
+check = "none"
+status = "advisory"
+why = "这一节是操作清单而不是约束：照抄能省一次试错，换成等价的 gh 调用不算违规，所以没有判据。"
+expires_if = "命令清单改由 skill 自带、本仓库不再维护时删。"
+
+[[rule]]
+id = "doc.issue.claim-removes-ready"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。"
+expires_if = "派单改由平台原生 assignee 加队列机制承担时删。"
+
+[[rule]]
+id = "doc.issue.in-progress-until-merge"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "PR 开着但没合并时改动不在 main，别人仍可能拿同一张票再做一遍；两个标签同时挂着又分不清是在改还是等复测。时机只在这里写，其余文档指过来。"
+expires_if = "开工到合入由同一条流水线独占、无法被第二个会话接手时删。"
+
+[[rule]]
+id = "doc.issue.abandon-restores-labels"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "弃单只摘 in-progress 不恢复原来的 ready-* / needs-triage，标签就烂在票上：既不在待办池里，也没人知道为什么停，下一个会话不敢碰。"
+expires_if = "标签历史由平台自动保留并可一键回滚时删。"
+
+[[rule]]
+id = "doc.issue.number-from-output"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "并行会话会占用按顺序推出来的编号；照 gh issue create 打印的 URL 取号，互链才不会指到别人的票。"
+expires_if = "开票后由工具直接回填编号与互链时删。"
+
+[[rule]]
+id = "doc.issue.close-on-merge"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "合入即关（需真机复测的例外，见 waiting-for-verify），否则已修的票会一直留在待办池里；票里没做的 Follow-up 要转进跟踪票，拖着这张票会让它永远关不掉。"
+expires_if = "issue 与 PR 按平台原生关联自动关闭时删。"
+
+[[rule]]
+id = "doc.issue.ticket-is-spec"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "Spec 审查只认票面；grilling 定下的交付物漏写，已批准的东西会在审查里被报成 scope creep。"
+expires_if = "spec 改由独立文档承载、票只做索引时删。"
+
+[[rule]]
+id = "doc.pr.same-states-split-by-kind"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "外部 PR 和 issue 走同一套标签，但机型/清单类与核心行为类的处置不同；不先按类型分，要么把该重写的外部实现整单合进来，要么把一张只改配方表的 PR 当成架构提案退回。"
+expires_if = "PR 模板强制按类型分栏、处置方式从模板取时删。"
+
+[[rule]]
+id = "doc.pr.device-pr-three-checks"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "机型 PR 只靠 CI 挡不住三件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以三查不能省。"
+expires_if = "配方改由引擎统一的 DSL 表达、这三件事不再有手工写法时删。"
+
+[[rule]]
+id = "doc.pr.core-pr-reimplement"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "外部 PR 常夹带与本仓库模型冲突的写法（ADR 与模块边界在对方看不到的上下文里）；整单合并会把冲突一起带进来。"
+expires_if = "仓库对外开放到外部 PR 能完整跑一遍架构审查时删。"
+
+[[rule]]
+id = "doc.pr.triage-filter"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "维护者自己的 PR 进 triage 队列会与 issue 池重复计数；只留 CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE 才是外部请求面。"
+expires_if = "外部 PR 有独立队列、不再与 issue 共用 triage 时删。"
+
+[[rule]]
+id = "doc.pr.shared-number-space"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "advisory"
+why = "issue 与 PR 共用一个编号空间，裸 #42 可能是任一种；没有判据，只是读票时的习惯。"
+expires_if = "平台给 PR 单独编号时删。"
+
+[[rule]]
+id = "doc.wayfinder.protocol"
+source = "docs/agents/issue-tracker.md#Wayfinding operations"
+check = "none"
+status = "advisory"
+why = "这一节是 /wayfinder 的操作协议（map / child / blocking / frontier / claim / resolve），没有可违反的断言；登记在此只让它出现在索引里。"
+expires_if = "仓库不再使用 /wayfinder、或它自带这份协议时删。"
+
+# ---- docs/agents/release.md ----
+
+[[rule]]
+id = "doc.release.two-readers"
+source = "docs/agents/release.md#两个落点，两个读者"
+check = "none"
+status = "manual"
+why = "CHANGELOG 给维护者、Release 正文给用户；把维护者口径的字样（函数名、基线 SHA）搬进正文，用户读不出「现在会怎样」，把用户口径搬进 CHANGELOG 则让条目膨胀成段落。"
+expires_if = "CHANGELOG 不再对外发布、只剩一种读者时删。"
+
+[[rule]]
+id = "doc.release.note-sources"
+source = "docs/agents/release.md#正文的原料"
+check = "none"
+status = "manual"
+why = "只凭记忆写正文会漏掉合并的 PR 与「其他」里的内部改动；原料固定取「上次发版后合入的 PR」与 `## 未发布` 两边，并按用户会不会遇到筛选。"
+expires_if = "Release 正文改由 PR 列表自动生成时删。"
+
+[[rule]]
+id = "doc.release.symptom-in-user-words"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "用户按症状（「关快应用后快递卡片打不开」）判断自己遇没遇到，按实现原因（「平台包被挂起」）写，他会跳过整条。"
+expires_if = "正文不再面向最终用户时删。"
+
+[[rule]]
+id = "doc.release.never-omit-unverified"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "把「没有真机复测」写成「已验证」或「应该没问题」，报告者会跳过复测，问题留到下一版才被发现。"
+expires_if = "每版都有真机复测、这句不再需要时删。"
+
+[[rule]]
+id = "doc.release.count-regression-once"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "用例数写成拼接或推算的复合计数就没有任何一次运行对得上；只写第 1 步 discover 那一次的输出，且只写一次。"
+expires_if = "正文不再写用例数时删。"
+
+[[rule]]
+id = "doc.release.credits-from-authors"
+source = "docs/agents/release.md#致谢谁"
+check = "none"
+status = "manual"
+why = "凭印象致谢会漏人、也会写进没有贡献的人；名单从本版合并的 PR 与「分析被采纳、本仓库重实现后关闭」的 PR 取，去掉 OWNER / MEMBER / COLLABORATOR，写 @handle 而不是笼统称呼。"
+expires_if = "致谢由平台按贡献自动生成时删。"
+
+[[rule]]
+id = "doc.release.search-index-lag"
+source = "docs/agents/release.md#致谢谁"
+check = "none"
+status = "advisory"
+why = "GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能查不到；对着本版 PR 列表手工补一遍即可，没有判据。"
+expires_if = "致谢取数改走 Releases API、不再依赖搜索索引时删。"
+
+[[rule]]
+id = "doc.release.apk-ships-with-desktop"
+source = "docs/agents/release.md#手机版 APK"
+check = "none"
+status = "manual"
+why = "手机版与桌面版同一版发布，但签名与分发由 owner 掌握；把它当成发版流水线的一步，会让没有证书的机器卡在打包上。"
+expires_if = "APK 改由 CI 签名并随 Release 自动产出时删。"
+
+[[rule]]
+id = "doc.release.android-ci-gate"
+source = "docs/agents/release.md#手机版 APK"
+check = "ci:assemble"
+status = "enforced"
+why = "Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）；`android.yml` 的 assemble job 只编译 debug，不产出发版产物。"
+expires_if = "手机版不再用 Gradle 构建、或发版流水线自己编译 APK 时删。"
+
+[[rule]]
+id = "doc.release.apk-link-sync"
+source = "docs/agents/release.md#手机版 APK"
+check = "none"
+status = "manual"
+why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。"
+expires_if = "下载页改由 Release 资产自动渲染时删。"
+
+[[rule]]
+id = "doc.release.product-contract-check"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "动了 `AGENTS.md` §1 的契约或实现侧对应的名单（`run.py` 的 NEVER、`polarity.NEG_PREFIX`、`off()` 的走向），用户侧 agent 的行为就变了；正文不提这一句，用户会在下一版发现步骤对不上。"
+expires_if = "`AGENTS.md` 随实现自动生成、契约变化不再需要人工转述时删。"
+
+[[rule]]
+id = "doc.release.numbers-from-one-run"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "正文验证行与 CHANGELOG 那一行必须是同一次 discover 的输出；跑两遍或从别处抄数，两个数字会互相对不上。两版解释器结论不一致时以 3.12 的发版构建为准。"
+expires_if = "验证数字由平台在发版时统一给出时删。"
+
+[[rule]]
+id = "doc.release.sha-and-credits-before-publish"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "发布前不核对每个包（含 APK）与 `SHA256SUMS.txt` 一致，装不上的包会直接发出去；致谢名单同一刻核对，发布后再改只能编辑已公开的正文。"
+expires_if = "校验清单改由流水线生成并比对时删。"
+
+[[rule]]
+id = "doc.release.apk-id-android"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮与 `baidu_rows.py` 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。"
+expires_if = "下载页不再用 id 区分平台时删。"
+
+[[rule]]
+id = "doc.release.gitee-portable-wording"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换也不卸载旧版；正文、下载页、README、docs/08 与 Gitee 发行版正文各覆盖自己那一处，页面写了不代表正文可以省。"
+expires_if = "Gitee 也收 Windows 安装版、免安装版不再独占国内渠道时删。"
+
+[[rule]]
+id = "doc.release.changelog-close-last"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "验证行里是发版那一刻跑出来的数；提前写，rebase 之后正文与 CHANGELOG 会对不上同一个版本的两次读数。CHANGELOG 收口因此放在最后一步。"
+expires_if = "验证行由工件生成、不再手写时删。"
+
+# ---- docs/agents/release-followup.md ----
+
+[[rule]]
+id = "doc.release.followup-version-gate"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "让报告者跑旧版去验新代码，只会再收一份重复上报，还会把「没修好」的结论记到新版本头上。"
+expires_if = "催复测通知由流水线按版本自动筛选时删。"
+
+[[rule]]
+id = "doc.release.followup-request-template"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "复测请求只说「好了吗」，报告者没法判断，只会再发一张截图；每条票留一条请求、写清装哪个版本、看哪一行、正确长什么样，回执才直接可判。"
+expires_if = "复测结果由客户端自动上报、不再需要人贴输出时删。"
+
+[[rule]]
+id = "doc.release.followup-close-or-reopen"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "确认后不关票，`waiting-for-verify` 会一直压在队列里；失败后不摘标改回 `needs-triage`，日志就不是新证据而是一次没人处理的复测。"
+expires_if = "issue 状态由报告者的客户端回执自动推进时删。"
+
+[[rule]]
+id = "doc.release.followup-pending-feedback-is-not-verify"
+source = "docs/agents/release-followup.md#待真机反馈（不是 `waiting-for-verify`）"
+check = "none"
+status = "manual"
+why = "缺真机数据（代码还没动）与「已修等确认」是两回事；挂错标签，要么让待实现的问题看起来已经修了，要么让等数据的票被当成复测催。"
+expires_if = "缺数据的票改由 issue 模板字段区分时删。"
+
+[[rule]]
+id = "doc.release.followup-why-not-ready"
+source = "docs/agents/release-followup.md#为什么不用 `ready-for-agent` 顶着"
+check = "none"
+status = "manual"
+why = "已修完只等真机确认的票，外观和待实现的票一模一样；2026-10-29 两种误判各发生过一次——一次被从头重做，一次被当成缺诊断数据。"
+expires_if = "队列改由平台原生状态表达、不再靠标签区分时删。"
+
+# ---- CONTEXT.md ----
+
+[[rule]]
+id = "domain.confirm.residual-note-only"
+source = "CONTEXT.md#执行"
+check = "code:tool/fast.py:Phone"
+status = "code"
+why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，_confirm_target() 返回坐标而不是动作；tests/test_residual_confirm_557.py 守的是那句说明挂得上去，不守「没点」。"
+expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能判断要不要点掉残留弹窗时删。"
+
+[[rule]]
+id = "domain.steps.optional-entry-not-unfinished"
+source = "CONTEXT.md#执行"
+check = "none"
+status = "manual"
+why = "可选入口经 maybe() / p.entry() 找不到只返回 False，不记 FAILED_STEPS、退出码仍是 0；记成未完成，没装某个 App 的机型会整段失败。与 dev.navigation.raise-vs-false 相邻但不同：那条判写脚本时该选哪个方法（该 raise 的写成返回 False 就是 #776，段内空跑还按成功记），这条判引擎把哪种失败算进退出码。方法选择的对照表在 docs/04 的「该用哪个导航方法」。"
+expires_if = "可选入口与必需入口统一成一种失败语义、脚本不再自己选时删。"
+
+[[rule]]
+id = "domain.steps.skip-ledger"
+source = "CONTEXT.md#执行"
+check = "none"
+status = "manual"
+why = "「按约定不跑」与「没跑成」共用一个台账时，结果页会把型号 / 版本不符、要机主手动进入的段算成失败并可重试，重跑还是同样跳过。跳过台账独立、不进 failed_steps 事件，退出码只看失败台账（#838、ADR-0029）。"
+expires_if = "结果页与退出码改由单独的结局字段表达、不再从台账推断时删。"
